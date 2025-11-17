@@ -1,22 +1,83 @@
-name: Contest report (manual test)
+name: Contest report (auto)
 
 on:
-  workflow_dispatch:
+  push:
 
 jobs:
-  test:
+  report:
     runs-on: ubuntu-latest
     steps:
-      - name: Send test payload
+      - name: Extract commit info
+        id: extract
+        run: |
+          python3 - <<'PY'
+import json,os
+event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+commits = event.get('commits', [])
+total = len(commits)
+readme = 0
+for c in commits:
+    changed = (c.get('added',[]) or []) + (c.get('modified',[]) or []) + (c.get('removed',[]) or [])
+    for f in changed:
+        if f and f.lower().endswith("readme.md"):
+            readme += 1
+            break
+# print outputs for later use
+print(f"TOTAL={total}")
+print(f"README={readme}")
+PY
+
+      - name: Compute outputs (stable)
+        run: |
+          echo "total=$(python3 - <<'PY'
+import json,os
+event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+print(len(event.get('commits', [])))
+PY
+)" >> $GITHUB_OUTPUT
+          echo "readme=$(python3 - <<'PY'
+import json,os
+event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+r=0
+for c in event.get('commits', []):
+    changed = (c.get('added',[]) or []) + (c.get('modified',[]) or []) + (c.get('removed',[]) or [])
+    for f in changed:
+        if f and f.lower().endswith("readme.md"):
+            r += 1
+            break
+print(r)
+PY
+)" >> $GITHUB_OUTPUT
+
+      - name: Send to organiser
         env:
           TOKEN: ${{ secrets.CONTEST_TOKEN }}
         run: |
+          TOTAL=$(jq -n '${{ steps.extract.outputs.TOTAL || "0" }}' 2>/dev/null || python3 - <<'PY'
+import json,os
+event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+print(len(event.get('commits', [])))
+PY
+)
+          README=$(jq -n '${{ steps.extract.outputs.README || "0" }}' 2>/dev/null || python3 - <<'PY'
+import json,os
+event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+r=0
+for c in event.get('commits', []):
+    changed = (c.get('added',[]) or []) + (c.get('modified',[]) or []) + (c.get('removed',[]) or [])
+    for f in changed:
+        if f and f.lower().endswith("readme.md"):
+            r += 1
+            break
+print(r)
+PY
+)
           PAYLOAD=$(cat <<EOF
 {
   "participant": "${{ github.repository_owner }}",
   "repo_url": "${{ github.server_url }}/${{ github.repository }}",
-  "commits": 1,
-  "readme_commits": 0,
+  "commits": ${TOTAL:-0},
+  "readme_commits": ${README:-0},
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "token": "${TOKEN}"
 }
