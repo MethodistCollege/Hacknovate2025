@@ -1,0 +1,25 @@
+name: Contest report (manual test)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test payload
+        env:
+          TOKEN: ${{ secrets.CONTEST_TOKEN }}
+        run: |
+          PAYLOAD=$(cat <<EOF
+{
+  "participant": "${{ github.repository_owner }}",
+  "repo_url": "${{ github.server_url }}/${{ github.repository }}",
+  "commits": 1,
+  "readme_commits": 0,
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "token": "${TOKEN}"
+}
+EOF
+)
+          curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "https://script.google.com/macros/s/AKfycbymuxom5r_2k42n9jd3ANNgibP_sw4i7j37m8WNyy2aKvGHsJhAgg08H-XDlynyBJtc/exec" -o /dev/null
